@@ -196,8 +196,9 @@ import * as prefix from '$unstable/prefixes';
 import {PollDialog} from './poll-modals';
 import {useClientConfig} from '$hooks/useClientConfig';
 import {PersonaPicker, type PersonaPickerTab} from './persona-picker/PersonaPicker.tsx';
-import {EmbedStatus, FixedPreviewUrlResponse, useBindEmbedAtom} from "$state/bundle.ts";
-const embedmap: Map<string, FixedPreviewUrlResponse> = new Map();
+import {createEmbedFamilyObserverAtom, EmbedStatus, FixedPreviewUrlResponse, useBindEmbedAtom} from "$state/bundle.ts";
+import {MatrixClient} from "matrix-js-sdk";
+const embedmap: Map<string, FixedPreviewUrlResponse | null> = new Map();
 
 const LocationDialog = lazy(() =>
   import('./location-modal').then((module) => ({ default: module.LocationDialog }))
@@ -271,6 +272,8 @@ interface RoomInputProps {
   editId?: string;
   onCancelEdit?: () => void;
 }
+
+
 
 export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
   (
@@ -1322,9 +1325,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       content[prefix.MATRIX_UNSTABLE_IMAGE_SOURCE_PACK_PROPERTY_NAME] =
         imagePacksUsedRef.current.toJSON();
 
-
       content[prefix.MATRIX_UNSTABLE_EMBEDDED_LINK_PREVIEW_PROPERTY_NAME] = [];
-      if (embedsEnabled) {
+      //check setting again here, just in case it was disabled while the message got composed
+      if (embedsEnabled && generateBundles) {
         for (const embedLink of embedLinks) {
           const result = embedmap.get(embedLink.url)
           if (result) {
@@ -1544,6 +1547,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         embedLinks,
         embedmap
     ]);
+    const [generateBundles] = useSetting(settingsAtom, 'generateBundles');
+    const [encryptBundledMedia] = useSetting(settingsAtom, 'encryptBundledMedia');
 
     const handleKeyDown: KeyboardEventHandler = useCallback(
       (evt) => {
@@ -1685,6 +1690,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     );
 
     const checkForEmbedables = (text: string) => {
+      if (!generateBundles) {
+        return;
+      }
       //from https://regex101.com/r/3fYy3x/1
       const URL_REGEX = RegExp(/http[s]?:\/\/.(?:www\.)?[-a-zA-Z0-9@%._\+~#=]{2,256}\.[a-z]{2,10}\b(?:[-a-zA-Z0-9@:%_\+.~#?&\/\/=]*)/gm)
       const urls = Array.from(text.matchAll(URL_REGEX)
@@ -1693,6 +1701,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           .map((e) => e[0]));
       if (urls.length > 0) {
         setUploadBoard(true);
+        urls.forEach((u) => {
+          if (!embedmap.has(u))
+            embedmap.set(u, null)
+        })
         const embedItems = urls.map((url): TEmbeddItem =>  ({
           url: url
         }));
@@ -1711,6 +1723,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         setEmbedsEnabled(false);
       }
     };
+
+    const handleEmbedsToggle = (state: boolean) => {
+      setEmbedsEnabled(state)
+        for (const param of roomEmbedAtomFamily.getParams()) {
+          roomEmbedAtomFamily.remove(param);
+        }
+    }
 
     const handleEmoticonSelect = (key: string, shortcode: string) => {
       const emoticonEl = createEmoticonElement(key, shortcode);
@@ -1889,7 +1908,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           forceMultilineLayout={showAudioRecorder}
           top={
             <>
-              {(selectedFiles.length > 0 || embedLinks.length > 0) && (
+              {(selectedFiles.length > 0 || (embedLinks.length > 0 && generateBundles)) && (
                 <UploadBoard
                   header={
                     <UploadBoardHeader
@@ -1930,7 +1949,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                             />
                           ))}
 
-                          {(embedLinks.length > 0 ) && (<>
+                          {(embedLinks.length > 0 ) && generateBundles && (<>
                             {selectedFiles.length > 0 && <Box style={{borderLeft: '1px solid currentColor'}}/>}
                             <UploadCard
                               key="embed_toggle"
@@ -1957,7 +1976,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                                     Bundled <br/> Embeds
                                   </Text>
 
-                                  <Switch value={embedsEnabled} onChange={setEmbedsEnabled}/>
+                                  <Switch value={embedsEnabled} onChange={handleEmbedsToggle}/>
                                 </Box>
 
                               </>}
@@ -1970,7 +1989,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                             .toReversed()
                             .map((link) => (
 
-                                <EmbedCardRenderer url={link.url} encrypt={room.hasEncryptionStateEvent()} successCallback={ (result) => {
+                                <EmbedCardRenderer url={link.url} encrypt={room.hasEncryptionStateEvent() && encryptBundledMedia} successCallback={ (result) => {
                                   embedmap.set(link.url, result);
                                 }}/>
                             ))}
