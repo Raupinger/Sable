@@ -134,8 +134,9 @@ import {
   convertPerMessageProfileToBeeperFormat,
   getCurrentlyUsedPerMessageProfileForAccount,
   getCurrentlyUsedPerMessageProfileForRoom,
-  type PerMessageProfile,
+  type PerMessageProfileMsc4461,
   setCurrentlyUsedPerMessageProfileIdForRoom,
+  stripPerMessageProfileFormattedBody,
 } from '$hooks/usePerMessageProfile';
 import {
   Bell,
@@ -195,7 +196,7 @@ import {AudioMessageRecorder} from './AudioMessageRecorder';
 import * as prefix from '$unstable/prefixes';
 import {PollDialog} from './poll-modals';
 import {useClientConfig} from '$hooks/useClientConfig';
-import {PersonaPicker, type PersonaPickerTab} from './persona-picker/PersonaPicker.tsx';
+import {PersistentPersonaPicker, type PersonaPickerTab} from './persona-picker/PersonaPicker.tsx';
 import {createEmbedFamilyObserverAtom, EmbedStatus, FixedPreviewUrlResponse, useBindEmbedAtom} from "$state/bundle.ts";
 import {MatrixClient} from "matrix-js-sdk";
 const embedmap: Map<string, FixedPreviewUrlResponse | null> = new Map();
@@ -325,8 +326,9 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [pmpProxyingEnable] = useSetting(settingsAtom, 'pmpProxying');
     const [pmpLatchingEnable] = useSetting(settingsAtom, 'pmpLatching');
     const [pmpPickerEnable] = useSetting(settingsAtom, 'pmpPicker');
+    const [pmpNoFallback] = useSetting(settingsAtom, 'pmpNoFallback');
 
-    const [latchedPersona, setLatchedPersona] = useState<PerMessageProfile>();
+    const [latchedPersona, setLatchedPersona] = useState<PerMessageProfileMsc4461>();
 
     const emojiBtnRef = useRef<HTMLButtonElement>(null);
     const gifBtnRef = useRef<HTMLButtonElement>(null);
@@ -511,11 +513,13 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const [sendError, setSendError] = useState<string | undefined>();
     const isEncrypted = room.hasEncryptionStateEvent();
     const [emojiBoardTab, setEmojiBoardTab] = useState<EmojiBoardTab | undefined>(undefined);
+    const [initialGifSearch, setInitialGifSearch] = useState<string>();
     const closeEmojiBoard = useCallback(() => {
       if (isMobileOrTablet()) {
         const activeElement = document.activeElement;
         if (activeElement instanceof HTMLElement) activeElement.blur();
       }
+      setInitialGifSearch(undefined);
       setEmojiBoardTab(undefined);
     }, []);
     const toggleEmojiBoardTab = useCallback((tab: EmojiBoardTab) => {
@@ -630,7 +634,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
             }
           }
           const editableHtml = pmpDisplayname
-            ? customHtml?.replace(/^<strong\s+data-mx-profile-fallback[^>]*>.*?<\/strong>/, '')
+            ? stripPerMessageProfileFormattedBody(customHtml ?? '')
             : customHtml;
 
           const mentionOptions = {
@@ -1091,7 +1095,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           eventId,
           mMentions,
           linkPreviews,
-          rawPmp
+          rawPmp,
+          pmpNoFallback
         );
 
         await mx.sendMessage(roomId, content as RoomMessageEventContent);
@@ -1205,6 +1210,8 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           room,
         })
       );
+      const rawGifCommand =
+        commandName === undefined ? plainText.match(/^\/gif(?:\s+(.*))?$/i) : undefined;
 
       let msgType = MsgType.Text;
 
@@ -1219,6 +1226,15 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         await pluralkitCmdMessageHandler.handleMessage(plainText);
         resetEditor(editor); // clear the editor
         return; // don't do anything besides handling the command
+      }
+
+      if (rawGifCommand) {
+        setInitialGifSearch(rawGifCommand[1] ?? '');
+        setEmojiBoardTab(EmojiBoardTab.Gif);
+        resetEditor(editor);
+        resetEditorHistory(editor);
+        sendTypingStatus(false);
+        return;
       }
 
       if (commandName) {
@@ -1242,7 +1258,10 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
         if ((commandName as Command) === Command.Poll) setShowPollPicker(true);
         else if ((commandName as Command) === Command.Location && plainText.trim().length === 0)
           setShowLocationPicker(true);
-        else {
+        else if (commandName === 'gif') {
+          setInitialGifSearch(plainText);
+          setEmojiBoardTab(EmojiBoardTab.Gif);
+        } else {
           const commandContent = commands[commandName as Command];
           if (commandContent) {
             commandContent.exe(plainText, customHtml);
@@ -1364,14 +1383,11 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       }
       if (perMessageProfile) {
         content[prefix.MATRIX_UNSTABLE_PER_MESSAGE_PROFILE_PROPERTY_NAME] =
-          convertPerMessageProfileToBeeperFormat(
-            perMessageProfile,
-            perMessageProfile.name.trim() !== ''
-          );
+          convertPerMessageProfileToBeeperFormat(perMessageProfile, !pmpNoFallback);
 
-        if (perMessageProfile.name.trim() !== '') {
+        if (!pmpNoFallback && perMessageProfile.displayname.trim() !== '') {
           // if a per-message profile is used, it must per spec include a fallback
-          const pmpPrefix = `${perMessageProfile.name}: `;
+          const pmpPrefix = `${perMessageProfile.displayname}: `;
 
           if (!content.body.startsWith(pmpPrefix)) {
             // to prevent double-prefixing when the fallback is already present
@@ -1381,7 +1397,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
           /**
            * html escaped version of the display name
            */
-          const escapedName = sanitizeText(perMessageProfile.name);
+          const escapedName = sanitizeText(perMessageProfile.displayname);
 
           const htmlPrefix = `<strong data-mx-profile-fallback>${escapedName}: </strong>`;
 
@@ -1518,6 +1534,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
       silentReply,
       pmpProxyingEnable,
       pmpLatchingEnable,
+      pmpNoFallback,
       pluralkitProxyMessageHandler,
       scheduledTime,
       editingScheduledDelayId,
@@ -2291,7 +2308,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                 </>
               )}
               {pmpPickerEnable && (
-                <PersonaPicker
+                <PersistentPersonaPicker
                   tab={personaPickerTab}
                   mx={mx}
                   roomId={roomId}
@@ -2318,6 +2335,7 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
                       onCustomEmojiSelect={handleEmoticonSelect}
                       onStickerSelect={handleStickerSelect}
                       onGifSelect={handleGifSelect}
+                      initialGifSearch={initialGifSearch}
                       requestClose={closeEmojiBoard}
                     />
                   );

@@ -111,6 +111,7 @@ export type MessageProps = {
     startThread?: boolean
   ) => void;
   onEditId?: (eventId?: string) => void;
+  onReproxyId?: (eventId?: string) => void;
   onReactionToggle: (targetEventId: string, key: string, shortcode?: string) => void;
   reply?: ReactNode;
   reactions?: ReactNode;
@@ -340,6 +341,7 @@ function MessageInternal(
     onReplyClick,
     onReactionToggle,
     onEditId,
+    onReproxyId,
     reply,
     reactions,
     hideReadReceipts,
@@ -456,8 +458,8 @@ function MessageInternal(
 
   const pmpNameColor = useMemo(() => {
     if (!renderPersonaColors) return undefined;
-    const pmpNameColorLight = parsedPMPContent?.colors?.on_light;
-    const pmpNameColorDark = parsedPMPContent?.colors?.on_dark;
+    const pmpNameColorLight = parsedPMPContent?.['eu.she-a.color']?.on_light;
+    const pmpNameColorDark = parsedPMPContent?.['eu.she-a.color']?.on_dark;
 
     return activeTheme.kind === ThemeKind.Dark ? pmpNameColorDark : pmpNameColorLight;
   }, [parsedPMPContent, activeTheme, renderPersonaColors]);
@@ -466,7 +468,7 @@ function MessageInternal(
    * boolean to indicate wheather we should indicate to the user that it is a pmp
    * We want to not show it, when the name is unset, or whitespace only
    */
-  const showPmPInfo = parsedPMPContent?.name && parsedPMPContent.name?.trim() !== '';
+  const showPmPInfo = parsedPMPContent?.displayname && parsedPMPContent.displayname?.trim() !== '';
   // Profiles and Colors
   const profile = useUserProfile(senderId, room, undefined, true, isVisible);
   const { color: usernameColor, font: usernameFont } = useSableCosmetics(
@@ -486,7 +488,7 @@ function MessageInternal(
    * otherwise we fall back to the profile pronouns.
    * This allows users to set pronouns on a per-message basis, while still falling back to their profile pronouns if they don't set any for a specific message.
    */
-  const pronouns = parsedPMPContent?.pronouns ?? profile.pronouns;
+  const pronouns = parsedPMPContent?.['io.fsky.nyx.pronouns'] ?? profile.pronouns;
 
   const [highlightMentions] = useSetting(settingsAtom, 'highlightMentions');
 
@@ -980,6 +982,7 @@ function MessageInternal(
             relations={relations}
             onReplyClick={onReplyClick}
             onEditId={onEditId}
+            onReproxyId={onReproxyId}
             hideReadReceipts={hideReadReceipts}
             showDeveloperTools={showDeveloperTools}
             canPinEvent={canPinEvent}
