@@ -381,12 +381,12 @@ jobs:
           fi
           pnpm tauri android build --apk --aab --target aarch64 --debug
           OUT='src-tauri/gen/android/app/build/outputs'
-          APK=$(find "$OUT/apk/universal/release" -name '*.apk' -type f | head -1)
-          AAB=$(find "$OUT/bundle/universalRelease" -name '*.aab' -type f | head -1)
+          APK=$(find "$OUT/apk/universal/debug" -name '*.apk' -type f | head -1)
+          AAB=$(find "$OUT/bundle/universalDebug" -name '*.aab' -type f | head -1)
           [ -n "$APK" ] || { echo 'APK not found' >&2; exit 1; }
           [ -n "$AAB" ] || { echo 'AAB not found' >&2; exit 1; }
-          mv "$APK" "$OUT/apk/universal/release/Sable-${VERSION}-android-universal.apk"
-          mv "$AAB" "$OUT/bundle/universalRelease/Sable-${VERSION}-android-universal.aab"
+          mv "$APK" "$OUT/apk/universal/debug/Sable-${VERSION}-android-universal.apk"
+          mv "$AAB" "$OUT/bundle/universalDebug/Sable-${VERSION}-android-universal.aab"
 
       - name: Attest Android bundles
         uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
