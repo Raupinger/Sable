@@ -379,7 +379,7 @@ jobs:
           if [ "$IS_NIGHTLY" = "true" ]; then
             export SABLE_BUILD_FLAVOR=dev
           fi
-          pnpm tauri android build --apk --aab --target aarch64 armv7
+          pnpm tauri android build --apk --aab --target aarch64 --debug
           OUT='src-tauri/gen/android/app/build/outputs'
           APK=$(find "$OUT/apk/universal/release" -name '*.apk' -type f | head -1)
           AAB=$(find "$OUT/bundle/universalRelease" -name '*.aab' -type f | head -1)
