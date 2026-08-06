@@ -41,6 +41,10 @@ android {
     }
     buildTypes {
         getByName("debug") {
+        {
+            applicationIdSuffix = ".dev"
+            resValue("string", "app_name", "Sable Dev")
+
             manifestPlaceholders["usesCleartextTraffic"] = "true"
             isDebuggable = true
             isJniDebuggable = true
