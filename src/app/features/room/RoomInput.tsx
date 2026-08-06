@@ -490,7 +490,6 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const handleEditorChange = useCallback(() => {
       setHasText(!isEmptyEditor(editor));
       checkForEmbedables(Editor.string(editor, []));
-
       if (!room.hasEncryptionStateEvent()) return;
 
       const now = Date.now();
