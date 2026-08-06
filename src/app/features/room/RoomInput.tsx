@@ -256,6 +256,7 @@ export const getReplyContent = (
 
 const log = createLogger('RoomInput');
 const debugLog = createDebugLogger('RoomInput');
+const ENCRYPTION_PREPARATION_INTERVAL_MS = 60_000;
 interface ReplyEventContent {
   'm.relates_to'?: IEventRelation;
 }
@@ -485,11 +486,19 @@ export const RoomInput = forwardRef<HTMLDivElement, RoomInputProps>(
     const handlePaste = useFilePasteHandler(handleFiles);
     const dropZoneVisible = useFileDropZone(fileDropContainerRef, handleFiles);
     const [hasText, setHasText] = useState(false);
+    const lastEncryptionPreparationAt = useRef(0);
     const handleEditorChange = useCallback(() => {
       setHasText(!isEmptyEditor(editor));
       checkForEmbedables(Editor.string(editor, []));
 
-    }, [editor]);
+      if (!room.hasEncryptionStateEvent()) return;
+
+      const now = Date.now();
+      if (now - lastEncryptionPreparationAt.current < ENCRYPTION_PREPARATION_INTERVAL_MS) return;
+
+      lastEncryptionPreparationAt.current = now;
+      mx.getCrypto()?.prepareToEncrypt(room);
+    }, [editor, mx, room]);
     const hasContent = hasText || selectedFiles.length > 0;
 
     const isComposing = useComposingCheck();
