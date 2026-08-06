@@ -388,21 +388,14 @@ jobs:
           mv "$APK" "$OUT/apk/universal/debug/Sable-${VERSION}-android-universal.apk"
           mv "$AAB" "$OUT/bundle/universalDebug/Sable-${VERSION}-android-universal.aab"
 
-      - name: Attest Android bundles
-        uses: actions/attest-build-provenance@0f67c3f4856b2e3261c31976d6725780e5e4c373 # v4.1.1
-        with:
-          subject-path: |
-            src-tauri/gen/android/app/build/outputs/apk/universal/release/*.apk
-            src-tauri/gen/android/app/build/outputs/bundle/universalRelease/*.aab
-
       - name: Attach Android bundles to release
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           OUT="src-tauri/gen/android/app/build/outputs"
-          for f in "$OUT"/apk/universal/release/*.apk \
-                   "$OUT"/bundle/universalRelease/*.aab; do
+          for f in "$OUT"/apk/universal/debug/*.apk \
+                   "$OUT"/bundle/universalDebug/*.aab; do
             [ -e "$f" ] || continue
             echo "Uploading $f"
             gh release upload "$TAG" "$f" --clobber
